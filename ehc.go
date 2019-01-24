@@ -40,32 +40,42 @@ func (e *EHC) Count(key interface{}) {
 	e.valueLock.RLock()
 	counter := e.values[key]
 	// does this counter exist?
-	if counter == nil {
-		// doesn't exist yet
+	if counter != nil {
+		// if it does exist, increment it
+		counter.inc()
 		e.valueLock.RUnlock()
-		e.valueLock.Lock()
-		defer e.valueLock.Unlock()
-		// we need to check that no one raced us here
-		counter := e.values[key]
-		if counter != nil {
-			// if they did, then let's just start over
-			e.Count(key)
-			return
-		}
-		// otherwise, let's add the counter
-		counter = newCounter(e, key)
-		e.values[key] = counter
 		return
 	}
-	// if it does exist, increment it
-	counter.inc()
+
+	// doesn't exist yet, so let's acquire
+	// an exclusive lock to create the counter
 	e.valueLock.RUnlock()
+	e.valueLock.Lock()
+
+	// we need to check that no one raced us here;
+	// the counter may have already been created while
+	// we were waiting our turn for the Lock()
+	counter = e.values[key]
+	if counter == nil {
+		// if no one raced us here, let's create the counter
+		e.values[key] = newCounter(e, key)
+	}
+	e.valueLock.Unlock()
+
+	// now we can call Count and have it actually be applied
+	e.Count(key)
 }
 
 func (e *EHC) remove(key interface{}) {
 	e.valueLock.Lock()
-	delete(e.values, key)
-	e.valueLock.Unlock()
+	defer e.valueLock.Unlock()
+
+	// let's check to make sure the value wasn't incremented
+	// while we were preparing to remove it
+	val := e.values[key]
+	if val != nil && val.Value() == 0 {
+		delete(e.values, key)
+	}
 }
 
 // Counter is the public interface for what is stored in the map
@@ -76,18 +86,16 @@ type Counter interface {
 
 // counter is the concrete implementation
 type counter struct {
+	count  int64
 	parent *EHC
 	key    interface{}
-	count  int64
 }
 
-func newCounter(parent *EHC, key interface{}) *counter {
-	c := &counter{
+func newCounter(parent *EHC, key interface{}) Counter {
+	return &counter{
 		parent: parent,
 		key:    key,
 	}
-	c.inc() //always start a counter at 1
-	return c
 }
 
 func (c *counter) inc() {
