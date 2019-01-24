@@ -100,3 +100,35 @@ func TestEHC_Values(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkEHC_Uniques(b *testing.B) {
+	e := NewEHC(10 * time.Millisecond)
+	for i := 0; i < b.N; i++ {
+		e.Count(i)
+	}
+}
+
+func BenchmarkEHC_Same(b *testing.B) {
+	e := NewEHC(10 * time.Millisecond)
+	for i := 0; i < b.N; i++ {
+		e.Count("hi")
+	}
+}
+
+func BenchmarkEHC_Distribution(b *testing.B) {
+	e := NewEHC(10 * time.Millisecond)
+	for i := 0; i < b.N; i++ {
+		e.Count(i % 10)
+	}
+}
+
+func BenchmarkEHC_MostlyDistribution(b *testing.B) {
+	e := NewEHC(10 * time.Millisecond)
+	for i := 0; i < b.N; i++ {
+		if i%10 > 2 {
+			e.Count(i % 10)
+		} else {
+			e.Count(i)
+		}
+	}
+}
