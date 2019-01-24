@@ -36,13 +36,19 @@ func (e *EHC) Values() (map[interface{}]Counter, sync.Locker) {
 	return e.values, e.valueLock.RLocker()
 }
 
+// Count increments the counter mapped to key by 1
 func (e *EHC) Count(key interface{}) {
+	e.CountMultiple(key, 1)
+}
+
+// CountMultiple increments the counter mapped to key by the given count
+func (e *EHC) CountMultiple(key interface{}, count int64) {
 	e.valueLock.RLock()
 	counter := e.values[key]
 	// does this counter exist?
 	if counter != nil {
 		// if it does exist, increment it
-		counter.inc()
+		counter.inc(count)
 		e.valueLock.RUnlock()
 		return
 	}
@@ -63,7 +69,7 @@ func (e *EHC) Count(key interface{}) {
 	e.valueLock.Unlock()
 
 	// now we can call Count and have it actually be applied
-	e.Count(key)
+	e.CountMultiple(key, count)
 }
 
 func (e *EHC) remove(key interface{}) {
@@ -80,7 +86,7 @@ func (e *EHC) remove(key interface{}) {
 
 // Counter is the public interface for what is stored in the map
 type Counter interface {
-	inc()
+	inc(int64)
 	Value() int64
 }
 
@@ -98,12 +104,16 @@ func newCounter(parent *EHC, key interface{}) Counter {
 	}
 }
 
-func (c *counter) inc() {
-	atomic.AddInt64(&c.count, 1)
+func (c *counter) inc(count int64) {
+	if count == 0 {
+		return
+	}
+
+	atomic.AddInt64(&c.count, count)
 
 	// after the window has elapsed, retract this increment
 	time.AfterFunc(c.parent.window, func() {
-		value := atomic.AddInt64(&c.count, -1)
+		value := atomic.AddInt64(&c.count, -count)
 		// if we hit zero, remove this counter from the map
 		if value == 0 {
 			c.parent.remove(c.key)

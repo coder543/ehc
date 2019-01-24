@@ -35,6 +35,17 @@ func TestEHC_Values(t *testing.T) {
 			},
 		},
 		{
+			name: "counts two of the same key using CountMultiple",
+			ehc: func() *EHC {
+				e := NewEHC(10 * time.Millisecond)
+				e.CountMultiple("test", 2)
+				return e
+			},
+			want: map[string]int64{
+				"test": 2,
+			},
+		},
+		{
 			name: "counts two of different key",
 			ehc: func() *EHC {
 				e := NewEHC(10 * time.Millisecond)
@@ -82,6 +93,20 @@ func TestEHC_Values(t *testing.T) {
 			},
 			want: map[string]int64{
 				"test": 1,
+			},
+		},
+		{
+			name: "expires a count incrementally using CountMultiple",
+			ehc: func() *EHC {
+				e := NewEHC(10 * time.Millisecond)
+				e.CountMultiple("test", 2)
+				time.Sleep(7 * time.Millisecond)
+				e.CountMultiple("test", 3)
+				time.Sleep(5 * time.Millisecond)
+				return e
+			},
+			want: map[string]int64{
+				"test": 3,
 			},
 		},
 	}
